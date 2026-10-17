@@ -1,0 +1,21 @@
+# Database
+falkordb==1.0.9
+
+# Environment
+python-dotenv==1.0.0
+
+# Code parsing
+gitpython==3.1.40
+sqlparse==0.5.0
+
+# Optional: Multi-language support (TypeScript, Dart)
+# Uncomment when tree-sitter-languages supports your Python version
+# tree-sitter>=0.23.0
+# tree-sitter-languages>=1.10.0
+
+# LLM API (for later steps)
+google-generativeai==0.8.3
+
+# Web framework (for later steps)
+fastapi==0.109.0
+uvicorn[standard]==0.27.0

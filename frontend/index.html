@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tremor — PR Seismograph</title>
+  <!-- marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f0883e;
+    }
+
+    header span {
+      font-size: 12px;
+      color: #8b949e;
+      background: #21262d;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid #30363d;
+    }
+
+    .tagline {
+      font-size: 12px;
+      color: #8b949e;
+      margin-left: auto;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .hero h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .hero p {
+      color: #8b949e;
+      font-size: 15px;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .field {
+      flex: 1;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      font-size: 14px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus {
+      border-color: #f0883e;
+    }
+
+    .field input::placeholder { color: #484f58; }
+
+    button[type="submit"] {
+      background: #f0883e;
+      border: none;
+      border-radius: 6px;
+      color: #0d1117;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 9px 20px;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+
+    button[type="submit"]:hover { opacity: 0.85; }
+    button[type="submit"]:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .examples {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    .examples span {
+      cursor: pointer;
+      color: #58a6ff;
+      margin-right: 10px;
+    }
+
+    .examples span:hover { text-decoration: underline; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 16px;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f0883e;
+      margin-top: 2px;
+    }
+
+    .stat-value.small { font-size: 14px; color: #e6edf3; }
+
+    /* Review output */
+    .review-output {
+      display: none;
+    }
+
+    .review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .review-header h3 {
+      font-size: 14px;
+      color: #8b949e;
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 5px 12px;
+    }
+
+    .copy-btn:hover { background: #30363d; }
+
+    /* Markdown styling */
+    .markdown-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #e6edf3;
+    }
+
+    .markdown-body h3 {
+      color: #f0883e;
+      font-size: 15px;
+      margin: 20px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .markdown-body h3:first-child { margin-top: 0; }
+
+    .markdown-body p { margin-bottom: 10px; }
+
+    .markdown-body ul {
+      margin: 8px 0 10px 20px;
+    }
+
+    .markdown-body li { margin-bottom: 4px; }
+
+    .markdown-body strong { color: #58a6ff; }
+
+    .markdown-body code {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      font-family: 'SFMono-Regular', monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      color: #f0883e;
+    }
+
+    .markdown-body pre {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 14px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+
+    .markdown-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #a5d6ff;
+      font-size: 13px;
+    }
+
+    /* Status */
+    .status {
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .status.loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1c2128;
+      border: 1px solid #30363d;
+      color: #8b949e;
+    }
+
+    .status.error {
+      display: block;
+      background: #1e0a0a;
+      border: 1px solid #6e1a1a;
+      color: #f85149;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #30363d;
+      border-top-color: #f0883e;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Graph badge */
+    .graph-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #0a1628;
+      border: 1px solid #1f3a5f;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #58a6ff;
+      padding: 2px 8px;
+      margin-left: 8px;
+    }
+
+    .powered-by {
+      text-align: center;
+      font-size: 11px;
+      color: #484f58;
+      margin-top: 40px;
+      padding-bottom: 40px;
+    }
+
+    .powered-by a { color: #58a6ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Tremor</h1>
+  <span>PR Seismograph</span>
+  <span class="graph-badge">⬡ FalkorDB</span>
+  <span class="tagline">Graph Hacks 2024 · Track: Agents That Act on Connected Data</span>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>Trace the blast radius of any code change</h2>
+    <p>Enter a function name to see its impact, risk score, tests to run, and suggested reviewers — all derived from a live FalkorDB graph.</p>
+  </div>
+
+  <!-- Input card -->
+  <div class="card">
+    <form id="analyze-form">
+      <div class="input-row">
+        <div class="field">
+          <label>Function Name</label>
+          <input
+            id="function-input"
+            type="text"
+            placeholder="e.g. invoke, convert, echo"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="field" style="max-width: 180px;">
+          <label>Module (optional)</label>
+          <input
+            id="module-input"
+            type="text"
+            placeholder="e.g. core, types"
+            autocomplete="off"
+          />
+        </div>
+        <button type="submit" id="analyze-btn">Analyze →</button>
+      </div>
+      <div class="examples">
+        Try:
+        <span onclick="fillExample('invoke', 'core')">invoke</span>
+        <span onclick="fillExample('convert', 'types')">convert</span>
+        <span onclick="fillExample('echo', 'utils')">echo</span>
+        <span onclick="fillExample('format_usage', 'formatting')">format_usage</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Status -->
+  <div class="status loading" id="status-loading">
+    <div class="spinner"></div>
+    <span id="status-text">Querying FalkorDB graph…</span>
+  </div>
+  <div class="status error" id="status-error"></div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="stats-bar" style="display:none">
+    <div class="stat">
+      <div class="stat-label">Blast Radius</div>
+      <div class="stat-value" id="stat-blast">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Tests Found</div>
+      <div class="stat-value" id="stat-tests">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Reviewers</div>
+      <div class="stat-value small" id="stat-reviewers">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Top Risk Function</div>
+      <div class="stat-value small" id="stat-risk">—</div>
+    </div>
+  </div>
+
+  <!-- Review output -->
+  <div class="card review-output" id="review-output">
+    <div class="review-header">
+      <h3>🤖 Gemini Review · backed by graph evidence</h3>
+      <button class="copy-btn" onclick="copyReview()">Copy markdown</button>
+    </div>
+    <div class="markdown-body" id="review-content"></div>
+  </div>
+
+  <div class="powered-by">
+    Powered by <a href="https://falkordb.com" target="_blank">FalkorDB</a> ·
+    Graph Hacks 2024 · Built with Python AST + Cypher + Gemini
+  </div>
+</main>
+
+<script>
+  const API_BASE = 'http://localhost:8765';
+  let lastReviewMd = '';
+
+  function fillExample(fn, mod) {
+    document.getElementById('function-input').value = fn;
+    document.getElementById('module-input').value = mod;
+  }
+
+  function showLoading(msg) {
+    document.getElementById('status-text').textContent = msg;
+    document.getElementById('status-loading').style.display = 'flex';
+    document.getElementById('status-error').style.display = 'none';
+    document.getElementById('review-output').style.display = 'none';
+    document.getElementById('stats-bar').style.display = 'none';
+  }
+
+  function hideLoading() {
+    document.getElementById('status-loading').style.display = 'none';
+  }
+
+  function showError(msg) {
+    hideLoading();
+    const el = document.getElementById('status-error');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+  }
+
+  function showStats(stats) {
+    document.getElementById('stat-blast').textContent = stats.blast_radius ?? '—';
+    document.getElementById('stat-tests').textContent = stats.tests_found ?? '0';
+    document.getElementById('stat-reviewers').textContent =
+      (stats.reviewers && stats.reviewers.length > 0)
+        ? stats.reviewers.join(', ')
+        : 'None found';
+    document.getElementById('stat-risk').textContent = stats.top_risk ?? '—';
+    document.getElementById('stats-bar').style.display = 'flex';
+  }
+
+  function showReview(markdown) {
+    lastReviewMd = markdown;
+    document.getElementById('review-content').innerHTML = marked.parse(markdown);
+    document.getElementById('review-output').style.display = 'block';
+  }
+
+  function copyReview() {
+    navigator.clipboard.writeText(lastReviewMd).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy markdown', 2000);
+    });
+  }
+
+  document.getElementById('analyze-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const fn = document.getElementById('function-input').value.trim();
+    const mod = document.getElementById('module-input').value.trim();
+
+    if (!fn) {
+      showError('Please enter a function name.');
+      return;
+    }
+
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing…';
+
+    showLoading('Querying FalkorDB graph — gathering blast radius, reviewers, risk score…');
+
+    try {
+      const resp = await fetch(`${API_BASE}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          function_name: fn,
+          module_name: mod || null
+        })
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+
+      const data = await resp.json();
+
+      hideLoading();
+      showStats(data.stats || {});
+      showReview(data.review);
+
+    } catch (err) {
+      if (err.message.includes('fetch')) {
+        showError('Cannot reach MCP server at localhost:8765. Make sure it is running: python src/mcp_server.py');
+      } else {
+        showError(err.message);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Analyze →';
+    }
+  });
+
+  // Check server on load
+  fetch(`${API_BASE}/`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.functions_in_graph) {
+        document.querySelector('.hero p').textContent +=
+          ` · ${d.functions_in_graph} functions loaded in graph`;
+      }
+    })
+    .catch(() => {
+      document.querySelector('.hero p').textContent =
+        '⚠ MCP server not running. Start with: source .venv/bin/activate && python src/mcp_server.py';
+    });
+</script>
+</body>
+</html>

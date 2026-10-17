@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tremor — Code Graph Explorer</title>
+
+<!-- vis-network for graph visualization -->
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<!-- marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #4493f8;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --orange: #e3b341;
+    --purple: #bc8cff;
+    --python: #3572A5;
+    --typescript: #3178c6;
+    --sql: #e38c00;
+    --dart: #00B4AB;
+    --session: #f0a500;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .logo span { color: var(--text-muted); font-weight: 400; }
+
+  .header-stats {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .stat-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stat-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Main layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* ── Left sidebar ── */
+  .sidebar {
+    width: 320px;
+    min-width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 10px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .tab-panel.active { display: flex; }
+
+  /* ── Search tab ── */
+  .search-area {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .search-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .nl-input-wrap {
+    position: relative;
+  }
+
+  textarea.nl-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: none;
+    height: 68px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+  }
+
+  textarea.nl-input:focus { border-color: var(--accent); }
+  textarea.nl-input::placeholder { color: var(--text-muted); }
+
+  .search-btn {
+    width: 100%;
+    margin-top: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s;
+  }
+
+  .search-btn:hover { background: #3083e8; }
+  .search-btn:disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; }
+
+  /* Quick examples */
+  .examples {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .examples-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .example-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(68,147,248,0.1);
+  }
+
+  /* Query result area */
+  .query-result {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .cypher-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--yellow);
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .result-table th {
+    background: var(--surface2);
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .result-table tr:hover td { background: var(--surface2); cursor: pointer; }
+
+  /* ── Memory tab ── */
+  .memory-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .memory-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .memory-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .memory-item:hover { border-color: var(--accent); }
+
+  .memory-fn {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .memory-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 10px;
+  }
+
+  .memory-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .badge-risk { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-blast { background: rgba(68,147,248,0.15); color: var(--accent); }
+  .badge-new { background: rgba(63,185,80,0.15); color: var(--green); }
+
+  /* ── Center: graph canvas ── */
+  .graph-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+
+  .graph-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .graph-toolbar-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .toolbar-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: auto;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .graph-legend {
+    display: flex;
+    gap: 12px;
+    margin-left: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  #graph-canvas {
+    flex: 1;
+    background: var(--bg);
+    width: 100%;
+    min-height: 400px;
+  }
+
+  /* Loading overlay */
+  .graph-loading {
+    position: absolute;
+    inset: 60px 0 0 0;
+    background: rgba(13,17,23,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    gap: 10px;
+    z-index: 5;
+  }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Right panel: detail / review ── */
+  .detail-panel {
+    width: 340px;
+    min-width: 280px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .detail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  /* Node info */
+  .node-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .node-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .info-label { color: var(--text-muted); font-size: 12px; }
+  .info-value { color: var(--text); font-weight: 500; }
+
+  .lang-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .lang-python { background: rgba(53,114,165,0.2); color: #4a9eff; }
+  .lang-typescript { background: rgba(49,120,198,0.2); color: #3ba3f5; }
+  .lang-sql { background: rgba(227,140,0,0.2); color: var(--sql); }
+  .lang-dart { background: rgba(0,180,171,0.2); color: var(--dart); }
+
+  /* Analyze button */
+  .analyze-btn {
+    width: 100%;
+    margin-top: 14px;
+    background: linear-gradient(135deg, #4493f8, #bc8cff);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: opacity 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  .analyze-btn:hover { opacity: 0.9; }
+  .analyze-btn:disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; }
+
+  /* Session history in detail panel */
+  .session-history {
+    margin-top: 14px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .session-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    background: var(--surface2);
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .session-id { color: var(--text-muted); font-family: monospace; font-size: 11px; }
+  .session-blast { color: var(--accent); font-weight: 600; }
+
+  /* Neighbors list */
+  .neighbors-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .neighbor-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .neighbor-chip:hover { border-color: var(--accent); }
+  .neighbor-name { font-weight: 600; color: var(--text); }
+  .neighbor-dir { color: var(--text-muted); font-size: 10px; }
+
+  /* Review markdown */
+  .review-content {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+
+  .review-content h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 14px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .review-content h3:first-child { margin-top: 0; }
+
+  .review-content p { margin-bottom: 8px; }
+
+  .review-content ul {
+    margin: 0 0 8px 16px;
+  }
+
+  .review-content li { margin-bottom: 3px; }
+
+  .review-content code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--yellow);
+  }
+
+  .review-content pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin: 8px 0;
+    overflow-x: auto;
+  }
+
+  .review-content pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--green);
+  }
+
+  /* Memory comparison badge */
+  .memory-compare {
+    background: rgba(240,165,0,0.1);
+    border: 1px solid rgba(240,165,0,0.3);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .memory-compare .mc-title {
+    font-weight: 700;
+    color: var(--session);
+    margin-bottom: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .empty-icon { font-size: 36px; opacity: 0.4; }
+  .empty-title { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+  .empty-sub { font-size: 12px; color: var(--text-muted); opacity: 0.7; }
+
+  /* Toast notification */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--text);
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateY(10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .toast.show { display: block; }
+  .toast.error { border-color: var(--red); }
+  .toast.success { border-color: var(--green); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  /* Decision cards (How It Works panel) */
+  .decision-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .dc-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 5px;
+  }
+  .dc-query {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--yellow);
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 4px 6px;
+    margin-bottom: 5px;
+    word-break: break-all;
+  }
+  .dc-why {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">⚡ Tremor <span>/ Code Graph Explorer</span></div>
+  <div class="header-stats">
+    <div class="stat-pill" id="graph-stat-functions">
+      <div class="dot"></div>
+      <span>Loading...</span>
+    </div>
+    <div class="stat-pill" id="graph-stat-sessions">
+      📊 <span id="session-count">0</span> sessions
+    </div>
+    <div class="stat-pill" id="graph-stat-lang">
+      🌐 Multi-language
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- ── Left Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-tabs">
+      <div class="tab active" data-panel="search" onclick="switchTab(this,'search')">🔍 Search</div>
+      <div class="tab" data-panel="memory" onclick="switchTab(this,'memory')">🧠 Memory</div>
+      <div class="tab" data-panel="review" onclick="switchTab(this,'review')">📋 Review</div>
+      <div class="tab" data-panel="how" onclick="switchTab(this,'how')">⚡ How</div>
+    </div>
+
+    <!-- Search panel -->
+    <div class="tab-panel active" id="panel-search">
+      <div class="search-area">
+        <div class="search-label">Ask the graph</div>
+        <div class="nl-input-wrap">
+          <textarea
+            class="nl-input"
+            id="nl-input"
+            placeholder="Show me blast radius of invoke..."
+            rows="3"
+          ></textarea>
+        </div>
+        <button class="search-btn" id="search-btn" onclick="runNLQuery()">
+          <span>🔍</span> Search Graph
+        </button>
+      </div>
+
+      <div class="examples">
+        <div class="examples-label">Quick examples</div>
+        <div class="example-chips">
+          <div class="chip" onclick="setQuery('high risk functions')">⚠️ High risk</div>
+          <div class="chip" onclick="setQuery('all modules')">📁 Modules</div>
+          <div class="chip" onclick="setQuery('blast radius of invoke')">💥 Blast radius</div>
+          <div class="chip" onclick="setQuery('find reviewers for core')">👤 Reviewers</div>
+          <div class="chip" onclick="setQuery('test functions')">🧪 Tests</div>
+          <div class="chip" onclick="setQuery('python functions')">🐍 Python</div>
+          <div class="chip" onclick="setQuery('sql functions')">🗄️ SQL</div>
+          <div class="chip" onclick="setQuery('sessions')">📊 Sessions</div>
+        </div>
+      </div>
+
+      <div class="query-result" id="query-result">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">Ask anything about the codebase</div>
+          <div class="empty-sub">Use natural language or pick an example above</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory panel -->
+    <div class="tab-panel" id="panel-memory">
+      <div class="memory-header" id="memory-header">
+        Loading analysis history...
+      </div>
+      <div class="memory-list" id="memory-list">
+        <div class="empty-state">
+          <div class="empty-icon">🧠</div>
+          <div class="empty-title">No analyses yet</div>
+          <div class="empty-sub">Run an analysis to see session memory</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Left review panel (short) -->
+    <div class="tab-panel" id="panel-review">
+      <div class="detail-content" id="left-review-content">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div class="empty-title">No review yet</div>
+          <div class="empty-sub">Click a function node and generate a review</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How It Works panel — for judges -->
+    <div class="tab-panel" id="panel-how">
+      <div class="detail-content" style="padding:12px;font-size:12px;line-height:1.7">
+        <div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:10px">
+          ⚡ The graph drives every decision
+        </div>
+        <div style="color:var(--text-muted);margin-bottom:14px;font-size:11px">
+          The LLM never guesses risk, scope, or reviewers — FalkorDB computes all of it.
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">🎯 Risk Ranking</div>
+          <div class="dc-query">CALL algo.pageRank('Function', 'CALLS') YIELD node, score</div>
+          <div class="dc-why">PageRank needs iterative graph convergence — impossible in SQL</div>
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">💥 Blast Radius</div>
+          <div class="dc-query">MATCH (f)-[:CALLS*1..3]->(g:Function)</div>
+          <div class="dc-why">Variable-depth traversal — FalkorDB walks all paths in one query</div>
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">👤 Reviewers</div>
+          <div class="dc-query">MATCH (a:Author)-[:AUTHORED]->(c:Commit)-[:TOUCHED]->(m:Module)</div>
+          <div class="dc-why">3-entity 2-hop path — natural graph traversal across people + code</div>
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">🔗 Path Evidence</div>
+          <div class="dc-query">RETURN shortestPath((a)-[:CALLS*]->(b))</div>
+          <div class="dc-why">Built-in graph primitive — every claim has a verifiable path</div>
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">🧠 Session Memory</div>
+          <div class="dc-query">MATCH (s:AnalysisSession {function_name: $fn}) ORDER BY s.timestamp DESC</div>
+          <div class="dc-why">Memory stored as graph nodes — queryable like code structure</div>
+        </div>
+
+        <div class="decision-card">
+          <div class="dc-title">🤝 Agent State</div>
+          <div class="dc-query">MATCH (fi:Finding)-[:FLAGGED]->(f:Function {name: $fn})</div>
+          <div class="dc-why">Agents share state via graph — no direct API calls needed</div>
+        </div>
+
+        <div style="margin-top:14px;padding:10px;background:rgba(68,147,248,0.08);border:1px solid rgba(68,147,248,0.2);border-radius:6px;font-size:11px;color:var(--text-muted)">
+          Full details with runnable Cypher →
+          <a href="https://github.com/your-repo/blob/main/GRAPH_DECISIONS.md" 
+             style="color:var(--accent)" target="_blank">GRAPH_DECISIONS.md</a>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Graph Canvas ── -->
+  <div class="graph-area">
+    <div class="graph-toolbar">
+      <span class="graph-toolbar-title">Graph</span>
+
+      <div class="graph-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#3572A5"></div> Python
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#e38c00"></div> SQL
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#3178c6"></div> TypeScript
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#f0a500"></div> Session
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#888"></div> Module
+        </div>
+      </div>
+
+      <button class="toolbar-btn" onclick="reloadGraph()">↺ Reload</button>
+      <button class="toolbar-btn" onclick="fitGraph()">⊡ Fit</button>
+      <button class="toolbar-btn" onclick="openFalkorDB()">🔗 FalkorDB</button>
+    </div>
+
+    <div id="graph-canvas" style="flex:1;width:100%;height:100%;min-height:500px;background:#0d1117"></div>
+
+    <div class="graph-loading" id="graph-loading">
+      <div class="spinner"></div>
+      Loading graph from FalkorDB...
+    </div>
+  </div>
+
+  <!-- ── Right Detail Panel ── -->
+  <aside class="detail-panel">
+    <div class="detail-tabs">
+      <div class="tab active" data-panel="info" onclick="switchDetailTab(this,'info')">ℹ️ Node</div>
+      <div class="tab" data-panel="evidence" onclick="switchDetailTab(this,'evidence')">🔬 Evidence</div>
+      <div class="tab" data-panel="full-review" onclick="switchDetailTab(this,'full-review')">📝 Review</div>
+      <div class="tab" data-panel="findings" onclick="switchDetailTab(this,'findings');loadFindings()">🤝 Agents</div>
+    </div>
+
+    <!-- Node info tab -->
+    <div class="tab-panel active" id="detail-info">
+      <div class="detail-content">
+        <div class="empty-state" id="no-selection">
+          <div class="empty-icon">👆</div>
+          <div class="empty-title">Click any node</div>
+          <div class="empty-sub">See details, session history, and run analysis</div>
+        </div>
+        <div id="node-info" style="display:none">
+          <!-- filled by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Evidence tab -->
+    <div class="tab-panel" id="detail-evidence">
+      <div class="detail-content" id="evidence-content">
+        <div class="empty-state">
+          <div class="empty-icon">🔬</div>
+          <div class="empty-title">No evidence yet</div>
+          <div class="empty-sub">Select a function and run analysis to see graph evidence</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full review tab -->
+    <div class="tab-panel" id="detail-full-review">
+      <div class="detail-content">
+        <div id="review-output">
+          <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <div class="empty-title">No review generated</div>
+            <div class="empty-sub">Select a function and click "Generate Review"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agents findings tab -->
+    <div class="tab-panel" id="detail-findings">
+      <div class="detail-content" style="padding:12px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+          Findings stored by SecurityAgent + ComplexityAgent — shared via graph
+        </div>
+        <div id="findings-list">
+          <div class="empty-state">
+            <div class="empty-icon">🤝</div>
+            <div class="empty-title">No agent findings yet</div>
+            <div class="empty-sub">Run a multi-agent analysis to see findings</div>
+          </div>
+        </div>
+        <button class="search-btn" style="margin-top:10px" onclick="runMultiAgent()">
+          🤝 Run Multi-Agent Analysis
+        </button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API = window.TREMOR_API || 'http://localhost:8765';
+
+// ── State ───────────────────────────────────────────────────────────────────
+let network = null;
+let graphNodes = new vis.DataSet();
+let graphEdges = new vis.DataSet();
+let selectedNode = null;
+let lastReview = null;
+
+// ── Colors by language / type ────────────────────────────────────────────────
+const COLORS = {
+  python:         { background: '#1a3a5c', border: '#3572A5', highlight: { background: '#234d7a', border: '#4a9eff' } },
+  python_test:    { background: '#1a3a2e', border: '#3fb950', highlight: { background: '#224a38', border: '#4ccc60' } },
+  typescript:     { background: '#162a40', border: '#3178c6', highlight: { background: '#1e3a56', border: '#4a9eff' } },
+  typescript_test:{ background: '#1a3a2e', border: '#3fb950', highlight: { background: '#224a38', border: '#4ccc60' } },
+  sql:            { background: '#3a2a0a', border: '#e38c00', highlight: { background: '#4a3410', border: '#f0a500' } },
+  dart:           { background: '#0a2a2a', border: '#00B4AB', highlight: { background: '#0e3636', border: '#00d4ca' } },
+  module_python:  { background: '#101820', border: '#4a5568', highlight: { background: '#1a2533', border: '#718096' } },
+  module_sql:     { background: '#201808', border: '#6b5000', highlight: { background: '#2a1e08', border: '#8c6a00' } },
+  module_typescript: { background: '#0c1a28', border: '#2a4a6b', highlight: { background: '#152535', border: '#3a6a9b' } },
+  author:         { background: '#1a1a2e', border: '#7c5cbf', highlight: { background: '#2a2a40', border: '#bc8cff' } },
+  session:        { background: '#2a1e00', border: '#f0a500', highlight: { background: '#3a2a00', border: '#ffd060' } },
+};
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Wait for layout to complete before initializing vis-network
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      initGraph();
+      loadGraphData();
+      loadMemory();
+      loadStats();
+    }, 100);
+  });
+
+  // Enter key in textarea
+  document.getElementById('nl-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      runNLQuery();
+    }
+  });
+});
+
+// ── Graph initialization ─────────────────────────────────────────────────────
+function initGraph() {
+  const container = document.getElementById('graph-canvas');
+
+  const options = {
+    nodes: {
+      shape: 'dot',
+      size: 14,
+      font: { color: '#e6edf3', size: 11, face: '-apple-system, BlinkMacSystemFont, sans-serif' },
+      borderWidth: 2,
+      shadow: { enabled: true, size: 6, color: 'rgba(0,0,0,0.4)' }
+    },
+    edges: {
+      arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+      color: { color: '#30363d', highlight: '#4493f8', hover: '#4493f8' },
+      width: 1,
+      smooth: { type: 'dynamic' },
+      font: { color: '#8b949e', size: 9, align: 'middle' },
+      selectionWidth: 2
+    },
+    physics: {
+      enabled: true,
+      stabilization: { iterations: 100 },
+      barnesHut: {
+        gravitationalConstant: -3000,
+        centralGravity: 0.3,
+        springLength: 120,
+        damping: 0.09
+      }
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 200,
+      zoomView: true,
+      dragView: true
+    },
+    layout: { improvedLayout: true }
+  };
+
+  network = new vis.Network(container, { nodes: graphNodes, edges: graphEdges }, options);
+
+  network.on('click', (params) => {
+    if (params.nodes.length > 0) {
+      onNodeClick(params.nodes[0]);
+    }
+  });
+
+  network.on('doubleClick', (params) => {
+    if (params.nodes.length > 0) {
+      expandNode(params.nodes[0]);
+    }
+  });
+}
+
+// ── Load full graph ──────────────────────────────────────────────────────────
+async function loadGraphData() {
+  showGraphLoading(true);
+  try {
+    const res = await fetch(`${API}/graph/data?limit=80`);
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.detail || 'Failed to load graph');
+
+    graphNodes.clear();
+    graphEdges.clear();
+
+    // Add nodes with colors
+    const visNodes = data.nodes.map(n => ({
+      id: n.id,
+      label: n.label,
+      title: n.title,
+      color: COLORS[n.group] || COLORS.python,
+      size: getNodeSize(n),
+      shape: getNodeShape(n),
+      // Store extra data
+      _nodeType: n.node_type,
+      _language: n.language,
+      _module: n.module,
+      _functionName: n.node_type === 'function' ? n.label : null,
+    }));
+
+    const visEdges = data.edges.map((e, i) => ({
+      id: `e${i}`,
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      color: e.color,
+      dashes: e.dashes || false,
+    }));
+
+    graphNodes.add(visNodes);
+    graphEdges.add(visEdges);
+
+    // Force vis-network to redraw now that data is loaded
+    if (network) {
+      network.setData({ nodes: graphNodes, edges: graphEdges });
+      setTimeout(() => {
+        network.redraw();
+        network.fit({ animation: { duration: 800, easingFunction: 'easeInOutQuad' } });
+      }, 200);
+    }
+
+    // Update stats
+    document.getElementById('graph-stat-functions').innerHTML =
+      `<div class="dot"></div><span>${data.stats.functions} functions, ${data.stats.modules} modules</span>`;
+
+    showToast(`Graph loaded: ${data.stats.total_nodes} nodes, ${data.stats.total_edges} edges`, 'success');
+  } catch (err) {
+    showToast(`Failed to load graph: ${err.message}`, 'error');
+    // Show sample nodes if offline
+    showOfflineDemo();
+  } finally {
+    showGraphLoading(false);
+  }
+}
+
+function getNodeSize(n) {
+  if (n.node_type === 'module') return 20;
+  if (n.node_type === 'author') return 18;
+  if (n.node_type === 'session') return 16;
+  return 12;
+}
+
+function getNodeShape(n) {
+  if (n.node_type === 'module') return 'square';
+  if (n.node_type === 'author') return 'diamond';
+  if (n.node_type === 'session') return 'star';
+  return 'dot';
+}
+
+function showOfflineDemo() {
+  // Minimal demo when backend is down
+  graphNodes.add([
+    { id: 'fn_invoke', label: 'invoke', color: COLORS.python, shape: 'dot', title: 'Function: invoke\nModule: core.py\nLanguage: python' },
+    { id: 'fn_make_context', label: 'make_context', color: COLORS.python, shape: 'dot', title: 'Function: make_context\nModule: core.py' },
+    { id: 'mod_core', label: '📁 core', color: COLORS.module_python, shape: 'square', title: 'Module: core.py' },
+  ]);
+  graphEdges.add([
+    { id: 'e1', from: 'fn_invoke', to: 'fn_make_context', label: 'calls', color: { color: '#4a9eff' } },
+    { id: 'e2', from: 'mod_core', to: 'fn_invoke', label: 'contains', dashes: true, color: { color: '#555' } },
+  ]);
+}
+
+// ── Node click handler ──────────────────────────────────────────────────────
+async function onNodeClick(nodeId) {
+  const node = graphNodes.get(nodeId);
+  if (!node) return;
+
+  selectedNode = node;
+  document.getElementById('no-selection').style.display = 'none';
+  document.getElementById('node-info').style.display = 'block';
+
+  const nodeType = node._nodeType || 'function';
+  const lang = node._language || 'python';
+  const funcName = node._functionName || node.label;
+
+  let html = `
+    <div class="node-title">${node.label.replace('📁 ', '').replace('👤 ', '').replace('📊 ', '')}</div>
+    <div class="node-sub">${capitalize(nodeType)} · <span class="lang-badge lang-${lang}">${lang}</span></div>
+  `;
+
+  if (node._module) {
+    html += `<div class="info-row"><span class="info-label">Module</span><span class="info-value">${node._module}</span></div>`;
+  }
+
+  html += `<div class="info-row"><span class="info-label">Type</span><span class="info-value">${capitalize(nodeType)}</span></div>`;
+  html += `<div class="info-row"><span class="info-label">Language</span><span class="info-value">${lang}</span></div>`;
+
+  // Fetch neighbors
+  if (nodeType === 'function') {
+    try {
+      const res = await fetch(`${API}/graph/expand`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_name: funcName, node_type: 'Function' })
+      });
+      const data = await res.json();
+
+      if (data.ok && data.neighbors?.length > 0) {
+        const outgoing = data.neighbors.filter(n => n.direction === 'calls');
+        const incoming = data.neighbors.filter(n => n.direction === 'called_by');
+
+        html += `<div class="info-row"><span class="info-label">Calls</span><span class="info-value">${outgoing.length} functions</span></div>`;
+        html += `<div class="info-row"><span class="info-label">Called by</span><span class="info-value">${incoming.length} functions</span></div>`;
+
+        if (outgoing.length + incoming.length > 0) {
+          html += `<div class="section-title" style="margin-top:14px">Connections</div>`;
+          html += `<div class="neighbors-grid">`;
+          [...outgoing.slice(0,4), ...incoming.slice(0,4)].forEach(n => {
+            html += `
+              <div class="neighbor-chip" onclick="focusOnFunction('${n.name}')">
+                <div class="neighbor-name">${n.name}</div>
+                <div class="neighbor-dir">${n.direction === 'calls' ? '→ calls' : '← called by'}</div>
+              </div>`;
+          });
+          html += `</div>`;
+        }
+      }
+
+      // Session history
+      if (data.session_history?.length > 0) {
+        html += `<div class="section-title" style="margin-top:14px">📊 Session Memory</div>`;
+        data.session_history.forEach(s => {
+          const ago = s.timestamp ? Math.floor((Date.now()/1000 - s.timestamp) / 86400) : '?';
+          html += `
+            <div class="session-row">
+              <span class="session-id">${s.session_id}</span>
+              <span class="session-blast">${s.blast_radius_count} affected</span>
+              <span style="color:var(--text-muted);font-size:11px">${ago}d ago</span>
+            </div>`;
+        });
+      }
+
+    } catch (e) {
+      // Ignore network errors in detail panel
+    }
+
+    html += `
+      <button class="analyze-btn" id="node-analyze-btn" onclick="analyzeSelectedFunction()">
+        ⚡ Generate AI Review
+      </button>`;
+  }
+
+  document.getElementById('node-info').innerHTML = html;
+}
+
+// ── Run analysis on selected function ───────────────────────────────────────
+async function analyzeSelectedFunction() {
+  if (!selectedNode || selectedNode._nodeType !== 'function') {
+    showToast('Select a function node first', 'error');
+    return;
+  }
+
+  const funcName = selectedNode._functionName || selectedNode.label;
+  const btn = document.getElementById('node-analyze-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyzing...'; }
+
+  // Switch to review tab
+  switchDetailTab(document.querySelector('[data-panel="full-review"]'), 'full-review');
+
+  document.getElementById('review-output').innerHTML = `
+    <div style="padding:20px;text-align:center;color:var(--text-muted)">
+      <div class="spinner" style="margin:0 auto 12px"></div>
+      Gathering graph evidence for <strong>${funcName}</strong>...
+      <br><br>
+      <small>Calling 5 MCP tools → Gemini synthesis</small>
+    </div>`;
+
+  try {
+    const res = await fetch(`${API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ function_name: funcName })
+    });
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.detail || 'Analysis failed');
+
+    lastReview = data;
+
+    // Build review HTML
+    let reviewHtml = '';
+
+    // Memory comparison banner
+    if (data.memory && data.memory.risk_change !== 'new') {
+      reviewHtml += `
+        <div class="memory-compare">
+          <div class="mc-title">📊 Session Memory</div>
+          ${data.memory.summary.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
+        </div>`;
+    }
+
+    // Stats bar
+    const s = data.stats || {};
+    reviewHtml += `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="stat-pill"><span>💥 ${s.blast_radius || 0} affected</span></div>
+        <div class="stat-pill"><span>🧪 ${s.tests_found || 0} tests</span></div>
+        ${data.session_id ? `<div class="stat-pill"><span>💾 Session ${data.session_id}</span></div>` : ''}
+      </div>`;
+
+    // Markdown review
+    reviewHtml += `<div class="review-content">${marked.parse(data.review)}</div>`;
+
+    document.getElementById('review-output').innerHTML = reviewHtml;
+
+    // Also update evidence tab
+    updateEvidenceTab(data);
+
+    // Update left review panel
+    document.getElementById('left-review-content').innerHTML = `
+      <div class="node-title">${funcName}</div>
+      <div class="node-sub" style="margin-bottom:12px">AI Review · Session ${data.session_id || 'n/a'}</div>
+      <div class="review-content" style="font-size:12px">${marked.parse(data.review.substring(0, 600) + (data.review.length > 600 ? '\n\n_[Open Review tab for full output]_' : ''))}</div>
+    `;
+
+    // Reload memory panel
+    loadMemory();
+
+    showToast(`Review generated for ${funcName}`, 'success');
+
+  } catch (err) {
+    document.getElementById('review-output').innerHTML = `
+      <div style="padding:20px;color:var(--red)">
+        <strong>Error:</strong> ${err.message}
+        <br><br>
+        <small>Make sure the MCP server is running:<br><code>python src/mcp_server.py</code></small>
+      </div>`;
+    showToast(`Analysis failed: ${err.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Generate AI Review'; }
+  }
+}
+
+function updateEvidenceTab(data) {
+  const ev = data.evidence || {};
+  const blast = ev.blast_radius || {};
+  const tests = ev.find_tests || {};
+  const reviewers = ev.find_reviewers || {};
+  const risk = ev.rank_risk || {};
+  const path = ev.explain_path || {};
+
+  let html = `<div class="section-title">Graph Evidence Queries</div>`;
+
+  // Blast radius
+  html += `<div style="margin-bottom:12px">
+    <div class="section-title" style="color:var(--red)">💥 Blast Radius</div>
+    <div class="cypher-box">${blast.query || 'MATCH (f)-[:CALLS*1..3]->(g) RETURN DISTINCT g'}</div>
+    <div style="font-size:12px;color:var(--text-muted)">${blast.affected_count || 0} functions affected</div>
+  </div>`;
+
+  // Risk
+  html += `<div style="margin-bottom:12px">
+    <div class="section-title" style="color:var(--yellow)">⚠️ Risk Ranking</div>
+    <div class="cypher-box">${risk.query ? risk.query.substring(0, 120) + '...' : 'CALL algo.pageRank(\'Function\',\'CALLS\')'}</div>
+    <div style="font-size:12px;color:var(--text-muted)">Method: ${risk.method || 'PageRank'}</div>
+  </div>`;
+
+  // Path
+  if (path.found) {
+    html += `<div style="margin-bottom:12px">
+      <div class="section-title" style="color:var(--accent)">🔗 Shortest Path</div>
+      <div class="cypher-box">${path.query || ''}</div>
+      <div style="font-size:12px;color:var(--green)">${path.path}</div>
+    </div>`;
+  }
+
+  // Reviewers
+  if (reviewers.reviewers?.length > 0) {
+    html += `<div style="margin-bottom:12px">
+      <div class="section-title" style="color:var(--green)">👤 Reviewers</div>
+      ${reviewers.reviewers.map(r => `<div class="session-row"><span>${r.author}</span><span class="session-blast">${r.commit_count} commits</span></div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('evidence-content').innerHTML = html;
+}
+
+// ── Natural language query ───────────────────────────────────────────────────
+async function runNLQuery() {
+  const input = document.getElementById('nl-input');
+  const q = input.value.trim();
+  if (!q) return;
+
+  const btn = document.getElementById('search-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Searching...';
+
+  const resultEl = document.getElementById('query-result');
+  resultEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 10px"></div>Running query...</div>`;
+
+  try {
+    const res = await fetch(`${API}/query/natural`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, max_results: 30 })
+    });
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.detail || 'Query failed');
+
+    // Highlight matching nodes in graph
+    if (data.rows?.length > 0) {
+      const funcNames = data.rows
+        .map(r => r.function || r.fn || r.name)
+        .filter(Boolean);
+      highlightNodes(funcNames);
+    }
+
+    // Show results
+    let html = `
+      <div style="margin-bottom:8px">
+        <div class="cypher-box">${data.cypher}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          ${data.row_count} results · ${data.method === 'gemini' ? '🤖 AI-generated' : '⚡ Template'} · ${data.description}
+        </div>
+      </div>`;
+
+    if (data.rows.length === 0) {
+      html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">No results found</div>`;
+    } else {
+      const cols = Object.keys(data.rows[0]);
+      html += `<table class="result-table"><thead><tr>`;
+      cols.forEach(c => { html += `<th>${c}</th>`; });
+      html += `</tr></thead><tbody>`;
+
+      data.rows.forEach(row => {
+        html += `<tr onclick="onResultRowClick(${JSON.stringify(JSON.stringify(row))})">`;
+        cols.forEach(c => {
+          const val = row[c];
+          let display = val === null || val === undefined ? '' : String(val);
+          // Truncate long values
+          if (display.length > 40) display = display.substring(0, 38) + '…';
+          html += `<td>${display}</td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+
+    resultEl.innerHTML = html;
+    switchTab(document.querySelector('[data-panel="search"]'), 'search');
+
+  } catch (err) {
+    resultEl.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">
+      <strong>Error:</strong> ${err.message}
+    </div>`;
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔍</span> Search Graph';
+  }
+}
+
+function onResultRowClick(rowJson) {
+  try {
+    const row = JSON.parse(rowJson);
+    const funcName = row.function || row.fn || row.name;
+    if (funcName) focusOnFunction(funcName);
+  } catch (e) {}
+}
+
+function highlightNodes(names) {
+  graphNodes.forEach(node => {
+    const isHighlighted = names.some(n =>
+      node.label === n || node.label.includes(n)
+    );
+    graphNodes.update({
+      id: node.id,
+      borderWidth: isHighlighted ? 4 : 2,
+      size: isHighlighted ? 18 : 12
+    });
+  });
+}
+
+function focusOnFunction(funcName) {
+  const nodeId = `fn_${funcName}`;
+  const node = graphNodes.get(nodeId);
+  if (node) {
+    network.focus(nodeId, { animation: true, scale: 1.2 });
+    network.selectNodes([nodeId]);
+    onNodeClick(nodeId);
+  }
+}
+
+// ── Load memory panel ────────────────────────────────────────────────────────
+async function loadMemory() {
+  try {
+    const res = await fetch(`${API}/memory/all?limit=15`);
+    const data = await res.json();
+
+    document.getElementById('session-count').textContent = data.total_sessions || 0;
+    document.getElementById('memory-header').textContent =
+      `${data.total_sessions || 0} total sessions · ${data.analyzed_functions?.length || 0} functions`;
+
+    const listEl = document.getElementById('memory-list');
+
+    if (!data.analyzed_functions || data.analyzed_functions.length === 0) {
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🧠</div>
+          <div class="empty-title">No analyses yet</div>
+          <div class="empty-sub">Run an analysis to see session memory</div>
+        </div>`;
+      return;
+    }
+
+    listEl.innerHTML = data.analyzed_functions.map(fn => {
+      const ago = fn.last_analyzed
+        ? Math.floor((Date.now()/1000 - fn.last_analyzed) / 86400)
+        : '?';
+      const agoStr = ago === 0 ? 'today' : `${ago}d ago`;
+      const riskBadge = fn.risk_rank
+        ? `<span class="memory-badge badge-risk">rank #${fn.risk_rank}</span>`
+        : '';
+      const blastBadge = `<span class="memory-badge badge-blast">💥 ${fn.blast_radius_count || 0}</span>`;
+
+      return `
+        <div class="memory-item" onclick="focusOnFunction('${fn.function_name}')">
+          <div class="memory-fn">${fn.function_name}</div>
+          <div class="memory-meta">
+            <span>${agoStr}</span>
+            <span>${fn.last_session_id}</span>
+          </div>
+          <div style="margin-top:5px;display:flex;gap:5px">
+            ${riskBadge}${blastBadge}
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    // Memory not available — backend may be down
+  }
+}
+
+// ── Load header stats ────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/`);
+    const data = await res.json();
+    document.getElementById('graph-stat-functions').innerHTML =
+      `<div class="dot"></div><span>${data.functions_in_graph || '?'} functions</span>`;
+  } catch (e) {}
+}
+
+// ── Utility ──────────────────────────────────────────────────────────────────
+function setQuery(text) {
+  document.getElementById('nl-input').value = text;
+  runNLQuery();
+}
+
+function switchTab(el, panel) {
+  document.querySelectorAll('.sidebar-tabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sidebar .tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`panel-${panel}`).classList.add('active');
+}
+
+function switchDetailTab(el, panel) {
+  document.querySelectorAll('.detail-tabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.detail-panel .tab-panel').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById(`detail-${panel}`).classList.add('active');
+}
+
+function reloadGraph() { loadGraphData(); }
+
+function fitGraph() {
+  if (network) network.fit({ animation: true });
+}
+
+function openFalkorDB() {
+  window.open('http://localhost:3000', '_blank');
+}
+
+function showGraphLoading(show) {
+  document.getElementById('graph-loading').style.display = show ? 'flex' : 'none';
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+// ── Load agent findings ──────────────────────────────────────────────────────
+async function loadFindings() {
+  const el = document.getElementById('findings-list');
+  el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div>Loading findings...</div>`;
+
+  try {
+    const res = await fetch(`${API}/agents/findings?limit=30`);
+    const data = await res.json();
+
+    if (!data.findings || data.findings.length === 0) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🤝</div>
+          <div class="empty-title">No agent findings yet</div>
+          <div class="empty-sub">Click "Run Multi-Agent Analysis" below</div>
+        </div>`;
+      return;
+    }
+
+    const severityColor = { HIGH: 'var(--red)', MEDIUM: 'var(--yellow)', LOW: 'var(--green)' };
+    const agentIcon = { complexity: '⚙️', security: '🔒' };
+
+    el.innerHTML = data.findings.map(f => `
+      <div class="decision-card" style="cursor:pointer" onclick="focusOnFunction('${f.function}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-weight:700;font-size:12px">${agentIcon[f.agent] || '🤖'} ${f.function}</span>
+          <span style="font-size:10px;font-weight:700;color:${severityColor[f.severity] || 'var(--text-muted)'}">
+            ${f.severity}
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">${f.agent} agent · ${f.module || ''}</div>
+        <div style="font-size:11px;color:var(--text);line-height:1.4">${f.message.substring(0, 110)}${f.message.length > 110 ? '…' : ''}</div>
+      </div>`).join('');
+
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);padding:10px;font-size:12px">Failed: ${e.message}</div>`;
+  }
+}
+
+async function runMultiAgent() {
+  if (!selectedNode || selectedNode._nodeType !== 'function') {
+    showToast('Select a function node first', 'error');
+    return;
+  }
+  const funcName = selectedNode._functionName || selectedNode.label;
+  showToast(`Running SecurityAgent + ComplexityAgent on ${funcName}...`);
+
+  try {
+    const res = await fetch(`${API}/agents/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ function_name: funcName })
+    });
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.detail || 'Multi-agent analysis failed');
+
+    const result = data.result;
+    showToast(`Combined risk: ${result.combined_risk?.level || 'n/a'}`, 'success');
+    loadFindings(); // Refresh findings list
+  } catch (e) {
+    showToast(`Multi-agent failed: ${e.message}`, 'error');
+  }
+}
+
+async function expandNode(nodeId) {
+  const node = graphNodes.get(nodeId);
+  if (!node || node._nodeType !== 'function') return;
+
+  const funcName = node._functionName || node.label;
+  showToast(`Expanding ${funcName}...`);
+
+  try {
+    const res = await fetch(`${API}/graph/expand`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node_name: funcName, node_type: 'Function', max_neighbors: 15 })
+    });
+    const data = await res.json();
+
+    if (!data.ok || !data.neighbors) return;
+
+    // Add neighbor nodes/edges that don't exist yet
+    data.neighbors.forEach(n => {
+      const nid = `fn_${n.name}`;
+      if (!graphNodes.get(nid)) {
+        const lang = n.language || 'python';
+        graphNodes.add({
+          id: nid,
+          label: n.name,
+          color: COLORS[lang] || COLORS.python,
+          title: `Function: ${n.name}\nLanguage: ${lang}`,
+          _nodeType: 'function',
+          _language: lang,
+          _functionName: n.name
+        });
+      }
+
+      const eid = n.direction === 'calls'
+        ? `${nodeId}__${nid}__calls`
+        : `${nid}__${nodeId}__calls`;
+
+      if (!graphEdges.get(eid)) {
+        graphEdges.add({
+          id: eid,
+          from: n.direction === 'calls' ? nodeId : nid,
+          to: n.direction === 'calls' ? nid : nodeId,
+          label: 'calls',
+          color: { color: '#4a9eff' }
+        });
+      }
+    });
+
+    showToast(`Expanded ${funcName}: ${data.neighbors.length} neighbors`, 'success');
+  } catch (e) {
+    showToast('Could not expand node', 'error');
+  }
+}
+</script>
+</body>
+</html>

@@ -24,37 +24,83 @@ Tremor loads any code repository into FalkorDB and uses multi-hop graph traversa
 
 ---
 
-## 🚀 Quick Start (any repo in 5 minutes)
+## 🚀 Setup & Run (5 minutes)
 
-### 1. Prerequisites
-- Docker Desktop running
-- Python 3.10+
-- Gemini API key (free at [aistudio.google.com](https://aistudio.google.com/app/apikey))
+### Step 1 — Clone and install
 
-### 2. Install
 ```bash
-git clone <this-repo>
-cd graphacks
-
-docker compose up -d                   # Start FalkorDB
+git clone https://github.com/Jahanvi11-1/Tremor.git
+cd Tremor
 
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-cp .env.example .env
-# Edit .env → set GEMINI_API_KEY=your_key_here
 ```
 
-### 3. Load a repository (see repo-type guide below)
+### Step 2 — Get a free Gemini API key
 
-### 4. Start the server + open UI
+Go to [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey), create a key, then:
+
 ```bash
-lsof -ti:8765 | xargs kill -9 2>/dev/null   # clear port if needed
-python src/mcp_server.py &
-
-open http://localhost:8765/ui                # visual graph explorer
+cp .env.example .env
+# Open .env and set: GEMINI_API_KEY=your_key_here
 ```
+
+### Step 3 — Start FalkorDB (requires Docker Desktop)
+
+```bash
+docker compose up -d
+```
+
+Verify: `docker ps` should show a `falkordb/falkordb` container running.
+
+### Step 4 — Load the built-in demo repo (pallets/click)
+
+```bash
+python src/loader.py
+# Expected: 590 functions, 1767 CALLS edges, 50 commits, 4 authors
+```
+
+### Step 5 — Start the server and open the UI
+
+```bash
+python src/mcp_server.py &
+open http://localhost:8765/ui      # macOS
+# Windows/Linux: open your browser to http://localhost:8765/ui
+```
+
+That's it. The visual graph explorer is running.
+
+> ⚠️ **Do not open `frontend/explorer.html` directly** — open via `http://localhost:8765/ui` or the browser will block API calls.
+
+---
+
+### To analyze YOUR own project instead of the demo
+
+```bash
+# Point REPO_PATH at your project's source directories
+REPO_PATH=/path/to/your/project \
+  PYTHON_DIRS=backend/app,src \
+  LANGUAGES=python \
+  python src/multi_loader.py
+```
+
+**Common patterns:**
+
+```bash
+# FastAPI / Django project
+REPO_PATH=/path/to/project PYTHON_DIRS=backend/app,app LANGUAGES=python python src/multi_loader.py
+
+# Python + SQL
+REPO_PATH=/path/to/project PYTHON_DIRS=backend SQL_DIRS=db,migrations LANGUAGES=python,sql python src/multi_loader.py
+
+# Simple Python repo (no venv inside)
+REPO_PATH=/path/to/project python src/multi_loader.py
+```
+
+> ⚠️ If the loader parses thousands of files, it has hit your `.venv` or `node_modules`. Use `PYTHON_DIRS` to point at source code only.
+
+After loading, restart the server and reopen the UI — the graph will show your project.
 
 ---
 
